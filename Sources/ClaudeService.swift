@@ -10,11 +10,11 @@ class ClaudeService: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var errorMessage: String? = nil
 
-    // Extra credit / overage spend — only populated when the account has
-    // pay-as-you-go extra usage (extra_usage / spend) enabled.
-    @Published var extraCreditActive: Bool = false
-    @Published var extraSpendText: String = ""  // e.g. "$12.34"
-    @Published var extraPercent: Double = 0.0   // 0.0 ~ 1.0 (used vs limit)
+    // Prepaid "usage credits" balance + auto-reload (claude.ai billing).
+    // Source: GET /api/organizations/{org}/prepaid/credits
+    @Published var creditActive: Bool = false
+    @Published var creditBalanceText: String = ""  // e.g. "$91.01"
+    @Published var creditAutoReload: String = ""    // e.g. "자동충전: $5 이하 시 $15까지"
 
     private let userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
@@ -150,6 +150,8 @@ class ClaudeService: ObservableObject {
     }
 
     private func fetchUsageWithOrg(sessionKey: String, orgId: String, completion: @escaping () -> Void) {
+        fetchCredits(sessionKey: sessionKey, orgId: orgId) // refresh prepaid balance alongside usage
+
         guard let url = URL(string: "https://claude.ai/api/organizations/\(orgId)/usage") else {
             DispatchQueue.main.async {
                 self.errorMessage = "잘못된 URL 설정"
@@ -190,24 +192,8 @@ class ClaudeService: ObservableObject {
                     let utilization: Double?
                     let resets_at: String?
                 }
-                struct Money: Codable {
-                    let amount_minor: Int?
-                    let currency: String?
-                    let exponent: Int?
-                }
-                struct Spend: Codable {
-                    let enabled: Bool?
-                    let percent: Double?
-                    let used: Money?
-                }
-                struct ExtraUsage: Codable {
-                    let is_enabled: Bool?
-                    let utilization: Double?
-                }
                 let five_hour: Window?
                 let seven_day: Window?
-                let spend: Spend?
-                let extra_usage: ExtraUsage?
             }
 
             if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 403 {
@@ -232,26 +218,6 @@ class ClaudeService: ObservableObject {
                         self.resetsAt7d = self.formatResetTimeWithDate(sevenDay.resets_at)
                     }
 
-                    // Extra credit / overage spend (shown only when enabled)
-                    let spendEnabled = usage.spend?.enabled ?? false
-                    let extraEnabled = usage.extra_usage?.is_enabled ?? false
-                    self.extraCreditActive = spendEnabled || extraEnabled
-                    if self.extraCreditActive {
-                        if let used = usage.spend?.used, let minor = used.amount_minor {
-                            self.extraSpendText = Self.formatMoney(
-                                amountMinor: minor,
-                                exponent: used.exponent ?? 2,
-                                currency: used.currency ?? "USD")
-                        } else {
-                            self.extraSpendText = ""
-                        }
-                        let pct = usage.spend?.percent ?? usage.extra_usage?.utilization ?? 0.0
-                        self.extraPercent = min(max(pct / 100.0, 0.0), 1.0)
-                    } else {
-                        self.extraSpendText = ""
-                        self.extraPercent = 0.0
-                    }
-
                     if usage.five_hour == nil && usage.seven_day == nil {
                         print("Unexpected response structure: \(rawJson)")
                         self.errorMessage = "사용량 정보를 파싱할 수 없습니다."
@@ -264,6 +230,58 @@ class ClaudeService: ObservableObject {
                     self.errorMessage = "데이터 파싱 에러"
                     completion()
                 }
+            }
+        }.resume()
+    }
+
+    // MARK: - Prepaid usage credits
+
+    private func fetchCredits(sessionKey: String, orgId: String) {
+        guard !sessionKey.isEmpty,
+              let url = URL(string: "https://claude.ai/api/organizations/\(orgId)/prepaid/credits") else { return }
+
+        var request = URLRequest(url: url)
+        request.setValue("sessionKey=\(sessionKey)", forHTTPHeaderField: "Cookie")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            struct AutoReload: Codable {
+                let enabled: Bool?
+                let threshold_in_minor_units: Int?
+                let reload_to_in_minor_units: Int?
+            }
+            struct CreditsResponse: Codable {
+                let amount: Int?
+                let currency: String?
+                let auto_reload_settings: AutoReload?
+            }
+
+            guard let data = data,
+                  let http = response as? HTTPURLResponse, http.statusCode == 200,
+                  let credits = try? JSONDecoder().decode(CreditsResponse.self, from: data),
+                  let amount = credits.amount else {
+                // No prepaid credits on this account (e.g. 404) — hide the section.
+                DispatchQueue.main.async { self.creditActive = false }
+                return
+            }
+
+            let currency = credits.currency ?? "USD"
+            let balance = Self.formatMoney(amountMinor: amount, exponent: 2, currency: currency)
+
+            var reload = ""
+            if let ar = credits.auto_reload_settings, ar.enabled == true,
+               let threshold = ar.threshold_in_minor_units,
+               let reloadTo = ar.reload_to_in_minor_units {
+                let t = Self.formatMoney(amountMinor: threshold, exponent: 2, currency: currency)
+                let r = Self.formatMoney(amountMinor: reloadTo, exponent: 2, currency: currency)
+                reload = "자동충전: \(t) 이하 시 \(r)까지"
+            }
+
+            DispatchQueue.main.async {
+                self.creditActive = true
+                self.creditBalanceText = balance
+                self.creditAutoReload = reload
             }
         }.resume()
     }

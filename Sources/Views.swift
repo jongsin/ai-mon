@@ -403,9 +403,9 @@ struct MainView: View {
                          colors: [Color(red: 0.95, green: 0.7, blue: 0.4),
                                   Color(red: 0.85, green: 0.5, blue: 0.3)])
 
-                // Extra credit / overage — appears only when enabled on the account
-                if claudeService.extraCreditActive {
-                    extraCreditView
+                // Prepaid usage credits — appears only when the account has them
+                if claudeService.creditActive {
+                    creditView
                 }
             } else {
                 Text("아직 연동된 계정이 없어요.\n설정에서 'Claude 계정 연동하기'를 눌러줘!")
@@ -467,44 +467,32 @@ struct MainView: View {
         }
     }
 
-    private var extraCreditView: some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private var creditView: some View {
+        VStack(alignment: .leading, spacing: 3) {
             HStack {
                 HStack(spacing: 5) {
                     Image(systemName: "creditcard.fill")
                         .font(.system(size: 11))
                         .foregroundColor(.purple)
-                    Text("추가 크레딧 사용")
+                    Text("사용 크레딧 잔액")
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
                 }
                 Spacer()
-                if !claudeService.extraSpendText.isEmpty {
-                    Text(claudeService.extraSpendText)
-                        .font(.system(size: 12, weight: .semibold))
-                }
+                Text(claudeService.creditBalanceText)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.purple)
             }
 
-            if claudeService.extraPercent > 0 {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color(NSColor.gridColor).opacity(0.5))
-                            .frame(height: 8)
-                        Capsule()
-                            .fill(LinearGradient(
-                                colors: [Color.purple.opacity(0.7), Color.purple],
-                                startPoint: .leading, endPoint: .trailing))
-                            .frame(width: geo.size.width * CGFloat(min(max(claudeService.extraPercent, 0.0), 1.0)), height: 8)
-                    }
-                }
-                .frame(height: 8)
-
-                HStack {
-                    Spacer()
-                    Text("한도의 \(Int((claudeService.extraPercent * 100).rounded()))%")
-                        .font(.system(size: 11))
+            if !claudeService.creditAutoReload.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 9))
                         .foregroundColor(.secondary)
+                    Text(claudeService.creditAutoReload)
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                    Spacer()
                 }
             }
         }
@@ -528,7 +516,7 @@ struct MainView: View {
             .buttonStyle(.plain)
             .help("AI.Mon 종료")
 
-            Text("AI.Mon v1.4")
+            Text("AI.Mon v1.5")
                 .font(.system(size: 10, weight: .light))
                 .foregroundColor(.secondary)
         }
@@ -560,6 +548,10 @@ struct MainView: View {
         claudeService.resetsAt5h = ""
         claudeService.resetsAt7d = ""
         claudeService.errorMessage = nil
+        claudeService.creditActive = false
+        // Full logout of the in-app browser so the next connect shows the real
+        // login page (lets you switch accounts / re-auth via Google).
+        ClaudeLoginController.clearSession()
     }
 
     private func autoFetchSessionKey() {
