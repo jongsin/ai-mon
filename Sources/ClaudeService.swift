@@ -10,6 +10,12 @@ class ClaudeService: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var errorMessage: String? = nil
 
+    // Extra credit / overage spend — only populated when the account has
+    // pay-as-you-go extra usage (extra_usage / spend) enabled.
+    @Published var extraCreditActive: Bool = false
+    @Published var extraSpendText: String = ""  // e.g. "$12.34"
+    @Published var extraPercent: Double = 0.0   // 0.0 ~ 1.0 (used vs limit)
+
     private let userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
     private init() {}
@@ -20,6 +26,16 @@ class ClaudeService: ObservableObject {
     static func normalize(_ utilization: Double?) -> Double {
         let v = (utilization ?? 0.0) / 100.0
         return min(max(v, 0.0), 1.0)
+    }
+
+    /// Formats a minor-unit money amount (e.g. cents) as a currency string.
+    static func formatMoney(amountMinor: Int, exponent: Int, currency: String) -> String {
+        let amount = Double(amountMinor) / pow(10.0, Double(exponent))
+        let fmt = NumberFormatter()
+        fmt.numberStyle = .currency
+        fmt.currencyCode = currency
+        fmt.maximumFractionDigits = exponent
+        return fmt.string(from: NSNumber(value: amount)) ?? String(format: "%.2f %@", amount, currency)
     }
 
     /// Maps org capabilities + rate-limit tier to a friendly plan label.
@@ -174,8 +190,24 @@ class ClaudeService: ObservableObject {
                     let utilization: Double?
                     let resets_at: String?
                 }
+                struct Money: Codable {
+                    let amount_minor: Int?
+                    let currency: String?
+                    let exponent: Int?
+                }
+                struct Spend: Codable {
+                    let enabled: Bool?
+                    let percent: Double?
+                    let used: Money?
+                }
+                struct ExtraUsage: Codable {
+                    let is_enabled: Bool?
+                    let utilization: Double?
+                }
                 let five_hour: Window?
                 let seven_day: Window?
+                let spend: Spend?
+                let extra_usage: ExtraUsage?
             }
 
             if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 403 {
@@ -198,6 +230,26 @@ class ClaudeService: ObservableObject {
                     if let sevenDay = usage.seven_day {
                         self.utilization7d = Self.normalize(sevenDay.utilization)
                         self.resetsAt7d = self.formatResetTimeWithDate(sevenDay.resets_at)
+                    }
+
+                    // Extra credit / overage spend (shown only when enabled)
+                    let spendEnabled = usage.spend?.enabled ?? false
+                    let extraEnabled = usage.extra_usage?.is_enabled ?? false
+                    self.extraCreditActive = spendEnabled || extraEnabled
+                    if self.extraCreditActive {
+                        if let used = usage.spend?.used, let minor = used.amount_minor {
+                            self.extraSpendText = Self.formatMoney(
+                                amountMinor: minor,
+                                exponent: used.exponent ?? 2,
+                                currency: used.currency ?? "USD")
+                        } else {
+                            self.extraSpendText = ""
+                        }
+                        let pct = usage.spend?.percent ?? usage.extra_usage?.utilization ?? 0.0
+                        self.extraPercent = min(max(pct / 100.0, 0.0), 1.0)
+                    } else {
+                        self.extraSpendText = ""
+                        self.extraPercent = 0.0
                     }
 
                     if usage.five_hour == nil && usage.seven_day == nil {
