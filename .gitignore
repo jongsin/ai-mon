@@ -6,6 +6,10 @@ build/
 DerivedData/
 *.icns
 
+# ───────── Release artifacts (distributed via GitHub Releases, not git) ─────────
+*.zip
+*.dmg
+
 # ───────── Credentials / local config (safety net) ─────────
 # The app stores its Claude sessionKey in ~/.config/ai-mon/config.json,
 # which lives OUTSIDE this repository and is never committed. The patterns
