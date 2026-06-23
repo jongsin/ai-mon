@@ -1,0 +1,33 @@
+# ───────── Build artifacts ─────────
+AI.Mon.app/
+AIMon.app/
+AppIcon.iconset/
+build/
+DerivedData/
+*.icns
+
+# ───────── Credentials / local config (safety net) ─────────
+# The app stores its Claude sessionKey in ~/.config/ai-mon/config.json,
+# which lives OUTSIDE this repository and is never committed. The patterns
+# below are only a guard against accidentally adding a copy into the repo.
+config.json
+*.sessionkey
+*.secret
+secrets*
+.env
+.env.*
+
+# ───────── macOS ─────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# ───────── Claude Code (local tooling) ─────────
+.claude/settings.local.json
+
+# ───────── Editor / misc ─────────
+*.swp
+*~
+.idea/
+.vscode/
