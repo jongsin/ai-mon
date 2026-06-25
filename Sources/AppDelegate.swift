@@ -101,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // MARK: - Popover
 
     private func setupPopover() {
-        popover.contentSize = NSSize(width: 380, height: 470)
+        popover.contentSize = NSSize(width: 380, height: 250)
         popover.behavior = .transient
         popover.contentViewController = NSHostingController(rootView: MainView(isWindowMode: false))
     }
@@ -125,8 +125,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let w = NSWindow(contentViewController: hosting)
             w.styleMask = [.titled, .closable, .miniaturizable, .resizable]
             w.title = "AI.Mon"
-            w.setContentSize(NSSize(width: 380, height: 470))
-            w.minSize = NSSize(width: 340, height: 360)
+            w.setContentSize(NSSize(width: 380, height: 250))
+            w.minSize = NSSize(width: 340, height: 200)
             w.delegate = self
             w.isReleasedWhenClosed = false
             w.identifier = NSUserInterfaceItemIdentifier("AIMonMainWindow")
