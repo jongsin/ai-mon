@@ -5,7 +5,7 @@ AppIcon.iconset/
 build/
 DerivedData/
 *.icns
-
+docs/
 # ───────── Release artifacts (distributed via GitHub Releases, not git) ─────────
 *.zip
 *.dmg
