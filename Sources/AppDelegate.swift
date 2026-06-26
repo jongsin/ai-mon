@@ -183,7 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         Publishers.CombineLatest(service.$utilization5h, service.$utilization7d)
             .receive(on: RunLoop.main)
             .sink { [weak self] u5, u7 in
-                self?.handleUsage(max(u5, u7))
+                self?.handleUsage(u5: u5, u7: u7)
             }
             .store(in: &cancellables)
 
@@ -192,18 +192,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             .sink { [weak self] _ in
                 self?.updateStatusButton()
                 self?.applyOpacity()
-                self?.handleUsage(max(ClaudeService.shared.utilization5h, ClaudeService.shared.utilization7d))
+                self?.handleUsage(u5: ClaudeService.shared.utilization5h,
+                                  u7: ClaudeService.shared.utilization7d)
             }
             .store(in: &cancellables)
     }
 
-    private func handleUsage(_ maxUtil: Double) {
+    private func handleUsage(u5: Double, u7: Double) {
         updateStatusButton()
 
+        // Alarm if EITHER the 5-hour or weekly usage crosses the threshold.
         let cfg = ConfigManager.shared.config
         let shouldAlarm = cfg.alarmEnabled
             && !cfg.claudeSessionKey.isEmpty
-            && maxUtil >= cfg.alarmThreshold
+            && (u5 >= cfg.alarmThreshold || u7 >= cfg.alarmThreshold)
 
         if shouldAlarm && !isAlarming {
             startFlashing()
@@ -242,7 +244,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let button = statusItem.button else { return }
         let cfg = ConfigManager.shared.config
         let service = ClaudeService.shared
-        let maxUtil = max(service.utilization5h, service.utilization7d)
 
         // Icon. Menu bar status buttons ignore contentTintColor for template
         // images (the system forces the menu bar color), so the alarm icon is
@@ -262,10 +263,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             button.attributedTitle = NSAttributedString(string: "")
         } else {
             button.imagePosition = .imageLeading
-            let pct = Int((maxUtil * 100).rounded())
+            let pct5h = Int((service.utilization5h * 100).rounded())
+            let pct7d = Int((service.utilization7d * 100).rounded())
             let color: NSColor = isAlarming ? .systemRed : .labelColor
             button.attributedTitle = NSAttributedString(
-                string: " \(pct)%",
+                string: " \(pct5h)% | \(pct7d)%",
                 attributes: [
                     .foregroundColor: color,
                     .font: NSFont.menuBarFont(ofSize: 0)
