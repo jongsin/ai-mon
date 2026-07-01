@@ -265,7 +265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             button.imagePosition = .imageLeading
             let pct5h = Int((service.utilization5h * 100).rounded())
             let pct7d = Int((service.utilization7d * 100).rounded())
-            let color: NSColor = isAlarming ? .systemRed : .labelColor
+            let color: NSColor = isAlarming ? Self.alarmRed : .labelColor
             button.attributedTitle = NSAttributedString(
                 string: " \(pct5h)% | \(pct7d)%",
                 attributes: [
@@ -277,6 +277,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     // MARK: - Images
+
+    // A light, high-luminance red (Material "Red A100") — plain .systemRed and
+    // even a mid-tone coral both get muted by the menu bar's translucent
+    // blending, so this needs to be bright enough to survive that blend.
+    static let alarmRed = NSColor(red: 1.0, green: 0.541, blue: 0.502, alpha: 1.0)
 
     static func appIconImage() -> NSImage {
         if let path = Bundle.main.path(forResource: "app_icon", ofType: "png"),
@@ -300,7 +305,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         tinted.lockFocus()
         let rect = NSRect(origin: .zero, size: size)
         base.draw(in: rect)
-        NSColor.systemRed.set()
+        alarmRed.set()
         rect.fill(using: .sourceAtop)
         tinted.unlockFocus()
         tinted.isTemplate = false
